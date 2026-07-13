@@ -24,6 +24,12 @@ CONTROL_PLANE_BASE_URL = os.environ.get(
 UI_USERNAME = os.environ.get("E2E_UI_USERNAME", "admin")
 UI_PASSWORD = os.environ.get("E2E_UI_PASSWORD", MASTER_KEY)
 
+# The MCP upstream the mcp suite registers on the proxy: the mcp-stub compose
+# service, addressed by service name on the compose network. It must be
+# reachable from the proxy, not from pytest; override when the proxy under
+# test runs somewhere the compose stub is not visible from.
+MCP_STUB_URL = os.environ.get("E2E_MCP_STUB_URL", "http://mcp-stub:8765/mcp")
+
 # Writes on the proxy are eventually consistent (e.g. spend rows flush on
 # proxy_batch_write_at, ~60s). Read-backs poll to this deadline, never sleep-once.
 POLL_TIMEOUT = float(os.environ.get("E2E_POLL_TIMEOUT", "120"))

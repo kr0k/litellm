@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-07-10T16:47:58.286372Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P3D"
 
 [manifest]
@@ -3462,6 +3462,7 @@ dev = [
     { name = "vcrpy" },
 ]
 e2e-dev = [
+    { name = "mcp" },
     { name = "playwright" },
     { name = "websockets" },
 ]
@@ -3635,6 +3636,7 @@ dev = [
     { name = "vcrpy", specifier = "==8.2.1" },
 ]
 e2e-dev = [
+    { name = "mcp", specifier = ">=1.26.0,<2.0" },
     { name = "playwright", specifier = "==1.61.0" },
     { name = "websockets", specifier = ">=15.0.1,<16.0" },
 ]
