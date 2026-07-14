@@ -7296,3 +7296,64 @@ def test_is_mcp_gateway_dcr_enabled_reads_general_settings():
 
     with patch.dict(general_settings, {}, clear=True):
         assert is_mcp_gateway_dcr_enabled() is False
+
+
+def test_gateway_dcr_flow_routing_is_flag_and_prefix_gated(monkeypatch):
+    """The aggregate DCR arms engage only for llm_dcrc_ client_ids with the flag on;
+    everything else keeps today's behavior byte-identically (unknown client 404s,
+    /authorize/complete does not exist, root register keeps its dummy return)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from litellm.proxy._experimental.mcp_server.discoverable_endpoints import router
+    from litellm.proxy._experimental.mcp_server.mcp_server_manager import (
+        global_mcp_server_manager,
+    )
+
+    monkeypatch.setenv("LITELLM_SALT_KEY", "sk-test-salt-for-lit3637")
+    monkeypatch.setattr("litellm.proxy.proxy_server.master_key", "sk-test-salt-for-lit3637", raising=False)
+    global_mcp_server_manager.registry.clear()
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    authorize_params = {
+        "client_id": "llm_dcrc_bogus",
+        "redirect_uri": "https://claude.ai/cb",
+        "response_type": "code",
+        "code_challenge": "c" * 43,
+        "code_challenge_method": "S256",
+    }
+
+    with _patch_gateway_dcr_flag(False):
+        assert client.get("/authorize", params=authorize_params).status_code == 404
+        assert client.post("/authorize/complete", data={"flow": "h"}).status_code == 404
+        register_off = client.post("/register", json={"redirect_uris": ["https://claude.ai/cb"]})
+        assert register_off.json()["client_id"] == "dummy_client"
+
+    with _patch_gateway_dcr_flag(True):
+        registered = client.post("/register", json={"redirect_uris": ["https://claude.ai/cb"]})
+        assert registered.status_code == 201
+        assert registered.json()["client_id"].startswith("llm_dcrc_")
+        assert registered.json()["token_endpoint_auth_method"] == "none"
+
+        bogus_client = client.get("/authorize", params=authorize_params)
+        assert bogus_client.status_code == 400
+        assert bogus_client.json()["error"] == "invalid_client"
+
+        no_cookie = client.post("/authorize/complete", data={"flow": "h"})
+        assert no_cookie.status_code == 400
+        assert no_cookie.json()["error"] == "invalid_request"
+
+        token_response = client.post(
+            "/token",
+            data={"grant_type": "authorization_code", "client_id": "llm_dcrc_bogus", "code": "x",
+                  "redirect_uri": "https://claude.ai/cb", "code_verifier": "v" * 43},
+        )
+        assert token_response.status_code == 400
+        assert token_response.json()["error"] == "invalid_grant"
+
+        upstream_shaped = client.post(
+            "/token",
+            data={"grant_type": "authorization_code", "client_id": "regular-upstream-client", "code": "x"},
+        )
+        assert upstream_shaped.status_code == 404
